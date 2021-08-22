@@ -1,0 +1,73 @@
+# Готовимся 
+
+vim /etc/hosts
+apt install nginx letsencrypt
+cd /etc/nginx/sites-available
+rm ../sites-enabled/default
+vim tls
+====================================================================
+# _SITE_NAME_
+
+server {
+
+listen 80;
+
+server_name _SITE_NAME_;
+
+location /.well-known/acme-challenge {
+    root /opt/www/acme;
+  }
+
+location / {
+ return 301 https://_SITE_NAME_$request_uri;
+ }
+}
+===================================================================
+nginx -t
+nginx -s reload
+
+# Получаем сертификат от LetsEncrypt
+mkdir -p /opt/www/acme
+letsencrypt certonly --webroot -w /opt/www/acme -d _SITE_NAME_
+cd ../sites-enabled/
+ln -s /etc/nginx/sites-available/tls tls
+vim tls
+
+===================================================================
+server {
+
+  listen 443 ssl http2;
+
+  server_name _SITE_NAME_;
+
+  ssl_certificate /etc/letsencrypt/live/_SITE_NAME_/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/_SITE_NAME_/privkey.pem;
+
+  root /var/www/html;
+  index index.html index.htm index.nginx-debian.html;
+
+  location / {
+    try_files $uri $uri/ =404;
+   }
+}
+===================================================================
+
+nginx -t
+nginx -s reload
+
+
+
+mkdir /etc/nginx/ssl && cd /etc/nginx/ssl
+# Генерируем ключ и СА сертификат 
+openssl req -new -newkey rsa:2048 -nodes -keyout ca.key -x509 -days 10000 -subj /C=BG/ST=Burgas/L=Burgas/O=Home/OU=User/CN=etc/emailAddress=admin@domain.com -out ca.crt
+# Генерируем ключ клиента
+openssl genrsa -out client.key 2048
+# Генерируем клиентский сертификат
+openssl req -new -key client.key -out client.csr -subj /C=BG/ST=Burgas/L=Burgas/O=Home/OU=UserKosmas/CN=User/emailAddress=user@domain.com
+Подписываем клиентский сертификат.
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 5000
+
+Дописывваем в конфигурацию
+
+  ssl_client_certificate /etc/nginx/ssl/ca.crt;
+  ssl_verify_client on;
